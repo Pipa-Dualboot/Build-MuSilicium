@@ -1,0 +1,66 @@
+name: Build Mu-Silicium (pipa)
+on:
+  schedule:
+    - cron: 0 0 1 * *
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        run: |
+          # Mu-Silicium is ~5GB to clone, so clear out unused preinstalled tools
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h
+
+      - name: Setup building environment
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/build_workdir
+          echo "BUILD_TIME=$(TZ=Asia/Shanghai date "+%Y%m%d-%H%M")-UTC+8" >> $GITHUB_ENV
+
+      - name: Set up Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Build
+        run: |
+          cd $GITHUB_WORKSPACE/build_workdir
+          git clone https://github.com/Project-Silicium/Mu-Silicium.git --recursive
+          cd Mu-Silicium
+          chmod +x ./setup_env.sh
+          ./setup_env.sh -p apt
+          python3 build_uefi.py -d pipa -r RELEASE
+          FD="Build/pipaPkg/RELEASE_CLANGPDB/FV/SILICIUM_UEFI.fd"
+          test -f "$FD"
+          cp -p "$FD" $GITHUB_WORKSPACE/Mu-pipa.fd
+
+      - name: Commit files
+        run: |
+          cd $GITHUB_WORKSPACE
+          rm -rf build_workdir
+          {
+            git config user.name github-actions
+            git config user.email github-actions@github.com
+            git add Mu-pipa.fd
+            git commit -m "$(date "+%Y-%m-%d %H:%M:%S") UTC"
+            if [ $? -eq 0 ]; then
+                git push
+            else
+                date >> RunDate.txt
+                git add RunDate.txt
+                git commit -m "$(date "+%Y-%m-%d %H:%M:%S")"
+                git push
+            fi
+          } || {
+            echo Execution Failed >RunDate.txt
+            exit 1
+          }
