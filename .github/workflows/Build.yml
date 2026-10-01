@@ -13,13 +13,17 @@ jobs:
           repository: Project-Silicium/Mu-Silicium
           ref: main
           submodules: recursive
-          fetch-depth: 1
 
       - name: Setup environment
         run: bash ./setup_env.sh -p apt
 
+      - name: Check pipa exists
+        run: |
+          ls Resources/Configs/pipa.toml
+          find Platforms -type d -name pipaPkg
+
       - name: Build pipa (DEBUG)
-        run: bash ./build_uefi.sh -d pipa -r DEBUG -c
+        run: python3 build_uefi.py -d pipa -r DEBUG -c
 
       - name: Verify FD was built
         run: |
