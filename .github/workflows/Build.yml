@@ -1,66 +1,45 @@
-name: Build Mu-Silicium (pipa)
+name: Build pipa DEBUG
 on:
-  schedule:
-    - cron: 0 0 1 * *
   workflow_dispatch:
-
-permissions:
-  contents: write
-
+  push:
+    branches: ["main"]
+    paths:
+      - 'Common/**'
+      - 'Platforms/**'
+      - 'Silicon/**'
+      - 'Resources/**'
+      - 'Mu_Basecore'
+      - 'Silicium-ACPI'
+env:
+  CI_BUILD: true
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - name: Check out
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Free up disk space
+      - name: Setup environment
+        run: bash ./setup_env.sh -p apt
+
+      - name: Build pipa (DEBUG)
+        run: bash ./build_uefi.sh -d pipa -r DEBUG -c
+
+      - name: Verify FD was built
         run: |
-          # Mu-Silicium is ~5GB to clone, so clear out unused preinstalled tools
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          df -h
+          fd=Build/pipaPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd
+          test -s "$fd" || { echo "::error::FD missing"; exit 1; }
+          ls -l "$fd" Mu-pipa* || true
 
-      - name: Setup building environment
+      - name: Collect outputs
         run: |
-          mkdir -p $GITHUB_WORKSPACE/build_workdir
-          echo "BUILD_TIME=$(TZ=Asia/Shanghai date "+%Y%m%d-%H%M")-UTC+8" >> $GITHUB_ENV
+          mkdir -p out
+          cp Build/pipaPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd out/pipa-DEBUG.fd
+          cp Mu-pipa* out/ || true
 
-      - name: Set up Python 3
-        uses: actions/setup-python@v5
+      - name: Upload
+        uses: actions/upload-artifact@v4
         with:
-          python-version: "3.x"
-
-      - name: Build
-        run: |
-          cd $GITHUB_WORKSPACE/build_workdir
-          git clone https://github.com/Project-Silicium/Mu-Silicium.git --recursive
-          cd Mu-Silicium
-          chmod +x ./setup_env.sh
-          ./setup_env.sh -p apt
-          python3 build_uefi.py -d pipa -r RELEASE
-          FD="Build/pipaPkg/RELEASE_CLANGPDB/FV/SILICIUM_UEFI.fd"
-          test -f "$FD"
-          cp -p "$FD" $GITHUB_WORKSPACE/Mu-pipa.fd
-
-      - name: Commit files
-        run: |
-          cd $GITHUB_WORKSPACE
-          rm -rf build_workdir
-          {
-            git config user.name github-actions
-            git config user.email github-actions@github.com
-            git add Mu-pipa.fd
-            git commit -m "$(date "+%Y-%m-%d %H:%M:%S") UTC"
-            if [ $? -eq 0 ]; then
-                git push
-            else
-                date >> RunDate.txt
-                git add RunDate.txt
-                git commit -m "$(date "+%Y-%m-%d %H:%M:%S")"
-                git push
-            fi
-          } || {
-            echo Execution Failed >RunDate.txt
-            exit 1
-          }
+          name: pipa-debug
+          path: out/*
+          if-no-files-found: error
+          compression-level: 4
