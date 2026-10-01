@@ -1,22 +1,19 @@
 name: Build pipa DEBUG
 on:
   workflow_dispatch:
-  push:
-    branches: ["main"]
-    paths:
-      - 'Common/**'
-      - 'Platforms/**'
-      - 'Silicon/**'
-      - 'Resources/**'
-      - 'Mu_Basecore'
-      - 'Silicium-ACPI'
 env:
   CI_BUILD: true
 jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Mu-Silicium
+        uses: actions/checkout@v4
+        with:
+          repository: Project-Silicium/Mu-Silicium
+          ref: main
+          submodules: recursive
+          fetch-depth: 1
 
       - name: Setup environment
         run: bash ./setup_env.sh -p apt
@@ -42,4 +39,4 @@ jobs:
           name: pipa-debug
           path: out/*
           if-no-files-found: error
-          compression-level: 4
+          compression-level: 9
